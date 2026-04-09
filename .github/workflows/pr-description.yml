@@ -1,0 +1,46 @@
+
+name: Auto PR Description
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  generate:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate PR description using GitHub Models
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const diff = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const prompt = `Generate a PR description. 
+            Branch: ${context.ref}
+            Title: ${context.payload.pull_request.title}
+            Diff: ${JSON.stringify(diff.data)}`;
+
+            const completion = await github.rest.codespaces.createNewModel({
+              model: "gpt-4o-mini",  // free option
+              input: prompt
+            });
+
+            const description = completion.data.output || "AI failed to generate description";
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: description
+            });
